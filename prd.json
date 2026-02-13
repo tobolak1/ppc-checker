@@ -30,8 +30,8 @@
         "npm run build still passes"
       ],
       "priority": 2,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "docker-compose.yml with PG15+Redis7, .env.example with all vars, .gitignore updated."
     },
     {
       "id": "US-003",
