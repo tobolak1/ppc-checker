@@ -1,0 +1,143 @@
+{
+  "project": "PPC Checker",
+  "branchName": "ralph/phase-1-foundation",
+  "description": "Phase 1 Foundation — Next.js setup, Prisma schema, auth, basic UI, API client utilities",
+  "userStories": [
+    {
+      "id": "US-001",
+      "title": "Initialize Next.js project with TypeScript and TailwindCSS",
+      "description": "As a developer, I need a Next.js 14 project with App Router, TypeScript strict mode, and TailwindCSS so we have a solid foundation to build on.",
+      "acceptanceCriteria": [
+        "Next.js 14 app created with App Router in current directory (npx create-next-app@latest . --typescript --tailwind --eslint --app --src-dir --use-npm)",
+        "TypeScript strict mode enabled in tsconfig.json",
+        "TailwindCSS configured and working",
+        "ESLint configured",
+        "Root page renders 'PPC Checker' heading",
+        "npm run build passes without errors"
+      ],
+      "priority": 1,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-002",
+      "title": "Create Docker Compose and environment configuration",
+      "description": "As a developer, I need Docker Compose for PostgreSQL and Redis, plus .env.example with all required environment variables.",
+      "acceptanceCriteria": [
+        "docker-compose.yml with PostgreSQL 15 (port 5432) and Redis 7 (port 6379)",
+        ".env.example with DATABASE_URL, REDIS_URL, NEXTAUTH_SECRET, NEXTAUTH_URL, GOOGLE_ADS_CLIENT_ID, GOOGLE_ADS_CLIENT_SECRET, GOOGLE_ADS_DEVELOPER_TOKEN, MERCHANT_CENTER_ID, SKLIK_API_TOKEN, SLACK_WEBHOOK_URL, SLACK_CHANNEL_CRITICAL, SLACK_CHANNEL_DEFAULT",
+        ".gitignore updated to include .env, .env.local, node_modules, .next",
+        "npm run build still passes"
+      ],
+      "priority": 2,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-003",
+      "title": "Set up Prisma ORM with complete database schema",
+      "description": "As a developer, I need the complete Prisma schema with all models, enums, relations, and indexes as defined in ZADANI.md so we can persist all application data.",
+      "acceptanceCriteria": [
+        "Prisma installed (npm install prisma @prisma/client)",
+        "schema.prisma with all models: User, Project, AdAccount, MerchantAccount, CheckRun, Finding, Alert, CampaignTemplate, GeneratedCampaign, SyncLog, CheckConfig",
+        "All enums defined: Platform, Severity, AlertStatus, CampaignType, SyncAction, UserRole",
+        "All relations with proper foreign keys",
+        "Indexes on frequently queried columns (check_id, severity, project_id, created_at)",
+        "N:M relation between User and Project via UserProject join table",
+        "Prisma client generated (npx prisma generate)",
+        "DB singleton helper at src/db/prisma.ts",
+        "npm run build passes"
+      ],
+      "priority": 3,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-004",
+      "title": "Set up NextAuth.js authentication with RBAC",
+      "description": "As a user, I need to be able to register and log in, with role-based access control (admin, auditor, client).",
+      "acceptanceCriteria": [
+        "NextAuth.js installed and configured with credentials provider",
+        "Auth API route at src/app/api/auth/[...nextauth]/route.ts",
+        "Registration API route at src/app/api/auth/register/route.ts with password hashing (bcrypt)",
+        "Login page at src/app/(auth)/login/page.tsx with email + password form",
+        "Register page at src/app/(auth)/register/page.tsx with name + email + password form",
+        "Session includes user id and role (UserRole enum)",
+        "Auth middleware in src/middleware.ts protecting /dashboard, /projects, /monitoring, /campaigns, /settings routes",
+        "npm run build passes"
+      ],
+      "priority": 4,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-005",
+      "title": "Create main application layout with sidebar navigation",
+      "description": "As a user, I need a clean application layout with sidebar navigation to access all sections of the app.",
+      "acceptanceCriteria": [
+        "Root layout for authenticated pages at src/app/(dashboard)/layout.tsx",
+        "Sidebar with navigation items: Dashboard, Projects, Monitoring, Campaigns, Settings",
+        "Each nav item has an icon (use simple SVG or heroicons)",
+        "Header bar showing current user name and logout button",
+        "Sidebar is collapsible on mobile (responsive)",
+        "Active nav item is visually highlighted",
+        "Styled with TailwindCSS (clean, professional look)",
+        "npm run build passes"
+      ],
+      "priority": 5,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-006",
+      "title": "Create dashboard overview page",
+      "description": "As a user, I want to see a dashboard with key stats and recent findings when I log in.",
+      "acceptanceCriteria": [
+        "Dashboard page at src/app/(dashboard)/dashboard/page.tsx",
+        "Stats cards showing: Total Accounts, Active Findings (by severity), Total Campaigns",
+        "Recent findings list (last 10) with severity badge, check_id, timestamp",
+        "Quick action links to Monitoring and Campaign Builder",
+        "Server component that queries Prisma for real data (empty state when no data)",
+        "Responsive grid layout with TailwindCSS",
+        "npm run build passes"
+      ],
+      "priority": 6,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-007",
+      "title": "Create projects CRUD pages",
+      "description": "As a user, I need to create and manage PPC projects, each representing a client with connected ad accounts.",
+      "acceptanceCriteria": [
+        "Projects list page at src/app/(dashboard)/projects/page.tsx",
+        "Project detail page at src/app/(dashboard)/projects/[id]/page.tsx with tabs: Overview, Accounts, Monitoring, Campaigns",
+        "Create project form (name, description) using Server Actions",
+        "Server actions in src/app/(dashboard)/projects/actions.ts for create, update, delete",
+        "Project list shows name, account count, last check timestamp",
+        "Empty state when no projects exist",
+        "npm run build passes"
+      ],
+      "priority": 7,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-008",
+      "title": "Create base API client utilities",
+      "description": "As a developer, I need reusable API client utilities with retry logic, rate limiting, and typed errors for all external API integrations.",
+      "acceptanceCriteria": [
+        "Base API client class at src/clients/base-client.ts with configurable timeout (default 30s), retry logic (3 retries, exponential backoff), and request/response logging",
+        "Rate limiter utility at src/lib/rate-limiter.ts (token bucket algorithm)",
+        "Typed error classes at src/lib/errors.ts: ApiError, RateLimitError, AuthError, TimeoutError",
+        "Structured logger at src/lib/logger.ts (request ID, duration, status)",
+        "Redis client helper at src/lib/redis.ts (connection singleton with ioredis)",
+        "All utilities properly typed with TypeScript, no 'any' types",
+        "npm run build passes"
+      ],
+      "priority": 8,
+      "passes": false,
+      "notes": ""
+    }
+  ]
+}
