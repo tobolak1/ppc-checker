@@ -1,3 +1,23 @@
 # Ralph Progress Log
 Started: 2026-02-13
+
+## Codebase Patterns
+- Next.js 16.1.6 with App Router (src/ directory structure)
+- TypeScript strict mode enabled
+- TailwindCSS v4 with @tailwindcss/postcss
+- Geist font family (Sans + Mono)
+- When create-next-app conflicts with existing files, temporarily move them out and restore after
+
+---
+
+## 2026-02-13 - US-001
+- Initialized Next.js project with `create-next-app@latest` (App Router, TypeScript, TailwindCSS, ESLint, src dir)
+- Updated root page to render "PPC Checker" heading
+- Updated metadata in layout.tsx
+- Files changed: src/app/page.tsx, src/app/layout.tsx, package.json, tsconfig.json, .gitignore, tailwind config, postcss config, eslint config
+- **Learnings for future iterations:**
+  - create-next-app won't run if ANY files exist in the directory (including untracked ones like .claude/)
+  - Need to temporarily move all files out, run create-next-app, then restore them
+  - Next.js 16.1.6 was installed (latest at this time), uses Turbopack by default
+  - .gitignore from create-next-app already covers .env* patterns
 ---

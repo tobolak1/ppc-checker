@@ -16,8 +16,8 @@
         "npm run build passes without errors"
       ],
       "priority": 1,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Next.js 16.1.6 with App Router, TypeScript strict, TailwindCSS, ESLint. Build passes."
     },
     {
       "id": "US-002",
