@@ -1,51 +1,134 @@
-import supabase from "@/lib/supabase";
+import { prisma } from "@/db/prisma";
+import { Prisma, Severity } from "@prisma/client";
 import { checkAds } from "./ads";
 import { checkProducts } from "./products";
 import { checkKeywords } from "./keywords";
 import { checkBilling } from "./billing";
 import { checkChanges } from "./changes";
 import { checkPerformance } from "./performance";
+import { AdAccountContext, CheckFinding, MerchantAccountContext } from "./types";
+import { sendAlert } from "@/notifications/slack";
 
-export interface Finding {
-  check_id: string;
-  severity: "CRITICAL" | "HIGH" | "MEDIUM" | "LOW" | "INFO";
-  title: string;
-  message: string;
-  data?: Record<string, unknown>;
-}
-
-export async function runAllChecks(projectId: string): Promise<Finding[]> {
-  // Get project's ad accounts and merchant accounts
-  const [{ data: adAccounts }, { data: merchantAccounts }, { data: checkConfigs }] = await Promise.all([
-    supabase.from("ppc_ad_accounts").select("*").eq("project_id", projectId).eq("active", true),
-    supabase.from("ppc_merchant_accounts").select("*").eq("project_id", projectId).eq("active", true),
-    supabase.from("ppc_check_configs").select("*").eq("project_id", projectId),
+export async function runAllChecks(projectId: string): Promise<CheckFinding[]> {
+  const [adAccounts, merchantAccounts, checkConfigs] = await Promise.all([
+    prisma.adAccount.findMany({
+      where: { projectId, active: true },
+    }),
+    prisma.merchantAccount.findMany({
+      where: { projectId, active: true },
+    }),
+    prisma.checkConfig.findMany({
+      where: { projectId },
+    }),
   ]);
 
   const disabledChecks = new Set(
-    (checkConfigs || []).filter((c: Record<string, boolean>) => !c.enabled).map((c: Record<string, string>) => c.check_id)
+    checkConfigs.filter((c) => !c.enabled).map((c) => c.checkId)
   );
 
-  const allFindings: Finding[] = [];
+  const thresholdMap = new Map(
+    checkConfigs
+      .filter((c) => c.threshold)
+      .map((c) => [c.checkId, c.threshold as Record<string, unknown>])
+  );
 
-  // Run checks for each ad account
-  for (const account of adAccounts || []) {
-    const checks = [
-      ...(!disabledChecks.has("ads") ? await checkAds(account) : []),
-      ...(!disabledChecks.has("keywords") ? await checkKeywords(account) : []),
-      ...(!disabledChecks.has("billing") ? await checkBilling(account) : []),
-      ...(!disabledChecks.has("changes") ? await checkChanges(account) : []),
-      ...(!disabledChecks.has("performance") ? await checkPerformance(account) : []),
+  const allFindings: CheckFinding[] = [];
+
+  for (const account of adAccounts) {
+    const ctx: AdAccountContext = {
+      id: account.id,
+      projectId: account.projectId,
+      platform: account.platform,
+      externalId: account.externalId,
+      name: account.name,
+      credentials: account.credentials as Record<string, unknown> | null,
+    };
+
+    const checkGroups = [
+      { prefix: "ads", fn: checkAds },
+      { prefix: "kw", fn: checkKeywords },
+      { prefix: "bill", fn: checkBilling },
+      { prefix: "chg", fn: checkChanges },
+      { prefix: "perf", fn: checkPerformance },
     ];
-    allFindings.push(...checks);
+
+    for (const { prefix, fn } of checkGroups) {
+      if (!disabledChecks.has(prefix)) {
+        const findings = await fn(ctx, thresholdMap.get(prefix));
+        allFindings.push(...findings);
+      }
+    }
   }
 
-  // Run merchant center checks
-  for (const merchant of merchantAccounts || []) {
+  for (const merchant of merchantAccounts) {
     if (!disabledChecks.has("products")) {
-      allFindings.push(...(await checkProducts(merchant)));
+      const ctx: MerchantAccountContext = {
+        id: merchant.id,
+        projectId: merchant.projectId,
+        externalId: merchant.externalId,
+        name: merchant.name,
+        feedUrl: merchant.feedUrl,
+      };
+      allFindings.push(...(await checkProducts(ctx, thresholdMap.get("products"))));
     }
   }
 
   return allFindings;
+}
+
+export async function runChecksForAllProjects(): Promise<{
+  projectsChecked: number;
+  totalFindings: number;
+}> {
+  const projects = await prisma.project.findMany({ select: { id: true, name: true } });
+  let totalFindings = 0;
+
+  for (const project of projects) {
+    const checkRun = await prisma.checkRun.create({
+      data: { projectId: project.id },
+    });
+
+    try {
+      const findings = await runAllChecks(project.id);
+      totalFindings += findings.length;
+
+      if (findings.length > 0) {
+        await prisma.finding.createMany({
+          data: findings.map((f) => ({
+            checkRunId: checkRun.id,
+            checkId: f.checkId,
+            severity: f.severity as Severity,
+            title: f.title,
+            message: f.message,
+            data: f.data ? (f.data as Prisma.InputJsonValue) : Prisma.JsonNull,
+          })),
+        });
+
+        // Send alerts for critical/high findings
+        for (const finding of findings) {
+          if (finding.severity === "CRITICAL" || finding.severity === "HIGH") {
+            await sendAlert({
+              projectName: project.name,
+              finding,
+            }).catch(() => {
+              // Alert sending is best-effort
+            });
+          }
+        }
+      }
+
+      await prisma.checkRun.update({
+        where: { id: checkRun.id },
+        data: { status: "completed", endedAt: new Date() },
+      });
+    } catch (error) {
+      await prisma.checkRun.update({
+        where: { id: checkRun.id },
+        data: { status: "failed", endedAt: new Date() },
+      });
+      throw error;
+    }
+  }
+
+  return { projectsChecked: projects.length, totalFindings };
 }

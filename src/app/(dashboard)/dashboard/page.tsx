@@ -1,13 +1,17 @@
-import supabase from "@/lib/supabase";
+import { prisma } from "@/db/prisma";
 import Link from "next/link";
 
 export const dynamic = "force-dynamic";
 
 export default async function DashboardPage() {
-  const [{ count: accountCount }, { data: findings }, { count: campaignCount }] = await Promise.all([
-    supabase.from("ppc_ad_accounts").select("*", { count: "exact", head: true }),
-    supabase.from("ppc_findings").select("*").is("resolved_at", null).order("created_at", { ascending: false }).limit(10),
-    supabase.from("ppc_generated_campaigns").select("*", { count: "exact", head: true }),
+  const [accountCount, findings, campaignCount] = await Promise.all([
+    prisma.adAccount.count(),
+    prisma.finding.findMany({
+      where: { resolvedAt: null },
+      orderBy: { createdAt: "desc" },
+      take: 10,
+    }),
+    prisma.generatedCampaign.count(),
   ]);
 
   const severityColors: Record<string, string> = {
@@ -24,15 +28,15 @@ export default async function DashboardPage() {
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
         <div className="bg-white rounded-lg shadow p-4">
           <p className="text-sm text-gray-500">Ad Accounts</p>
-          <p className="text-2xl font-bold">{accountCount || 0}</p>
+          <p className="text-2xl font-bold">{accountCount}</p>
         </div>
         <div className="bg-white rounded-lg shadow p-4">
           <p className="text-sm text-gray-500">Active Findings</p>
-          <p className="text-2xl font-bold text-red-600">{findings?.length || 0}</p>
+          <p className="text-2xl font-bold text-red-600">{findings.length}</p>
         </div>
         <div className="bg-white rounded-lg shadow p-4">
           <p className="text-sm text-gray-500">Campaigns</p>
-          <p className="text-2xl font-bold">{campaignCount || 0}</p>
+          <p className="text-2xl font-bold">{campaignCount}</p>
         </div>
         <Link href="/monitoring" className="bg-blue-600 text-white rounded-lg shadow p-4 hover:bg-blue-700">
           <p className="text-sm opacity-80">Quick Action</p>
@@ -45,14 +49,14 @@ export default async function DashboardPage() {
           <h2 className="font-semibold">Recent Findings</h2>
           <Link href="/monitoring" className="text-sm text-blue-600 hover:underline">View all</Link>
         </div>
-        {!findings?.length ? (
+        {!findings.length ? (
           <p className="p-4 text-sm text-gray-500">No active findings.</p>
         ) : (
           <ul className="divide-y">
-            {findings.map((f: Record<string, string>) => (
+            {findings.map((f) => (
               <li key={f.id} className="p-4 flex items-center gap-3">
                 <span className={`px-2 py-0.5 rounded text-xs font-medium ${severityColors[f.severity]}`}>{f.severity}</span>
-                <span className="text-sm font-mono text-gray-600">{f.check_id}</span>
+                <span className="text-sm font-mono text-gray-600">{f.checkId}</span>
                 <span className="text-sm flex-1">{f.title}</span>
               </li>
             ))}

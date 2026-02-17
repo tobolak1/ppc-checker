@@ -1,7 +1,7 @@
 import NextAuth from "next-auth";
 import CredentialsProvider from "next-auth/providers/credentials";
 import bcrypt from "bcryptjs";
-import supabase from "@/lib/supabase";
+import { prisma } from "@/db/prisma";
 
 const handler = NextAuth({
   providers: [
@@ -14,11 +14,9 @@ const handler = NextAuth({
       async authorize(credentials) {
         if (!credentials?.email || !credentials?.password) return null;
 
-        const { data: user } = await supabase
-          .from("ppc_users")
-          .select("*")
-          .eq("email", credentials.email)
-          .single();
+        const user = await prisma.user.findUnique({
+          where: { email: credentials.email },
+        });
 
         if (!user) return null;
 
@@ -33,14 +31,14 @@ const handler = NextAuth({
     async jwt({ token, user }) {
       if (user) {
         token.id = user.id;
-        token.role = (user as { role: "ADMIN" | "AUDITOR" | "CLIENT" }).role;
+        token.role = user.role;
       }
       return token;
     },
     async session({ session, token }) {
       if (session.user) {
-        (session.user as { id: string; role: string }).id = token.id as string;
-        (session.user as { id: string; role: string }).role = token.role as string;
+        session.user.id = token.id;
+        session.user.role = token.role;
       }
       return session;
     },

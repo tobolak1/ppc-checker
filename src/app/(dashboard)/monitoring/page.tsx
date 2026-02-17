@@ -1,14 +1,13 @@
-import supabase from "@/lib/supabase";
+import { prisma } from "@/db/prisma";
 import { RunChecksButton } from "./run-checks-button";
 
 export const dynamic = "force-dynamic";
 
 export default async function MonitoringPage() {
-  const { data: findings } = await supabase
-    .from("ppc_findings")
-    .select("*, ppc_check_runs(ppc_projects(name))")
-    .order("created_at", { ascending: false })
-    .limit(50);
+  const findings = await prisma.finding.findMany({
+    orderBy: { createdAt: "desc" },
+    take: 50,
+  });
 
   const severityColors: Record<string, string> = {
     CRITICAL: "bg-red-100 text-red-800",
@@ -25,7 +24,7 @@ export default async function MonitoringPage() {
         <RunChecksButton />
       </div>
       <div className="bg-white rounded-lg shadow">
-        {!findings?.length ? (
+        {!findings.length ? (
           <p className="p-6 text-gray-500">No findings yet. Click &quot;Run Checks&quot; to start monitoring.</p>
         ) : (
           <table className="w-full text-sm">
@@ -38,14 +37,14 @@ export default async function MonitoringPage() {
               </tr>
             </thead>
             <tbody className="divide-y">
-              {findings.map((f: Record<string, string>) => (
+              {findings.map((f) => (
                 <tr key={f.id}>
                   <td className="px-4 py-3">
                     <span className={`px-2 py-0.5 rounded text-xs font-medium ${severityColors[f.severity]}`}>{f.severity}</span>
                   </td>
-                  <td className="px-4 py-3 font-mono text-gray-600">{f.check_id}</td>
+                  <td className="px-4 py-3 font-mono text-gray-600">{f.checkId}</td>
                   <td className="px-4 py-3">{f.title}</td>
-                  <td className="px-4 py-3">{f.resolved_at ? "Resolved" : "Active"}</td>
+                  <td className="px-4 py-3">{f.resolvedAt ? "Resolved" : "Active"}</td>
                 </tr>
               ))}
             </tbody>

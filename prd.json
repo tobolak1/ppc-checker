@@ -49,8 +49,8 @@
         "npm run build passes"
       ],
       "priority": 3,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Prisma 5.22.0 installed. Schema with 12 models, 8 enums, all mapped to ppc_* Supabase tables via @@map(). Indexes on check_id, severity, project_id, created_at. DB singleton at src/db/prisma.ts. Build passes."
     },
     {
       "id": "US-004",
@@ -67,8 +67,8 @@
         "npm run build passes"
       ],
       "priority": 4,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "NextAuth.js with credentials provider using Prisma. Login/register pages. Session with user id + role (UserRole from @prisma/client). Middleware protecting all dashboard routes. Build passes."
     },
     {
       "id": "US-005",
@@ -85,8 +85,8 @@
         "npm run build passes"
       ],
       "priority": 5,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Client component layout with usePathname for active highlighting. Header with session user name + logout. Mobile responsive sidebar with overlay. SessionProvider via providers.tsx. Build passes."
     },
     {
       "id": "US-006",
@@ -102,8 +102,8 @@
         "npm run build passes"
       ],
       "priority": 6,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Server component with Prisma queries for accountCount, findings (last 10 unresolved), campaignCount. Severity color badges. Quick action to monitoring. Responsive grid. Build passes."
     },
     {
       "id": "US-007",
@@ -119,8 +119,8 @@
         "npm run build passes"
       ],
       "priority": 7,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Projects list with Prisma include for _count (adAccounts) and last checkRun. Detail page with adAccounts, merchantAccounts, checkRuns. Server actions for create/delete. Build passes."
     },
     {
       "id": "US-008",
@@ -136,8 +136,8 @@
         "npm run build passes"
       ],
       "priority": 8,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "BaseApiClient with retry (3x, exponential backoff), rate limiting (token bucket), 30s timeout. Typed errors (ApiError, RateLimitError, AuthError, TimeoutError). Structured JSON logger. Redis singleton with ioredis. No 'any' types. Build passes."
     }
   ]
 }
