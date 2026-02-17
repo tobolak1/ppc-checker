@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
-import { prisma } from "@/db/prisma";
-import { CampaignType, Platform, Prisma } from "@prisma/client";
+import { db, T } from "@/db";
+import type { CampaignType, Platform } from "@/db/types";
 
 export async function POST(req: Request) {
   try {
@@ -11,18 +11,24 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
     }
 
-    const template = await prisma.campaignTemplate.create({
-      data: {
-        projectId,
+    const { data: template, error } = await db
+      .from(T.campaignTemplates)
+      .insert({
+        project_id: projectId,
         name,
-        campaignType: campaignType as CampaignType,
+        campaign_type: campaignType as CampaignType,
         platform: platform as Platform,
-        segmentation: segmentation ? (segmentation as Prisma.InputJsonValue) : undefined,
-        adTemplates: adTemplates ? (adTemplates as Prisma.InputJsonValue) : undefined,
-        budget: budget ? budget : undefined,
-        biddingStrategy,
-      },
-    });
+        segmentation: segmentation ?? null,
+        ad_templates: adTemplates ?? null,
+        budget: budget ?? null,
+        bidding_strategy: biddingStrategy ?? null,
+      })
+      .select("*")
+      .single();
+
+    if (error) {
+      return NextResponse.json({ error: error.message }, { status: 500 });
+    }
 
     return NextResponse.json(template, { status: 201 });
   } catch (error) {

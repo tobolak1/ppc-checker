@@ -1,4 +1,4 @@
-import { CampaignType, Platform } from "@prisma/client";
+import type { CampaignType, Platform } from "@/db/types";
 import { segmentProducts } from "../segmentation/segment";
 import {
   AdTemplate, CampaignPreview, FeedProduct,

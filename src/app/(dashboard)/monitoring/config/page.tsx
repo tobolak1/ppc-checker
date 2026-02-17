@@ -1,4 +1,5 @@
-import { prisma } from "@/db/prisma";
+import { db, T } from "@/db";
+import type { Project, CheckConfig } from "@/db/types";
 
 export const dynamic = "force-dynamic";
 
@@ -42,14 +43,15 @@ const ALL_CHECKS = [
 ];
 
 export default async function CheckConfigPage() {
-  const projects = await prisma.project.findMany({
-    select: { id: true, name: true },
-    orderBy: { name: "asc" },
-  });
+  const { data: projects } = await db
+    .from(T.projects)
+    .select("id, name")
+    .order("name", { ascending: true });
 
-  const configs = await prisma.checkConfig.findMany();
+  const { data: configsRaw } = await db.from(T.checkConfigs).select("*");
+  const configs = (configsRaw ?? []) as CheckConfig[];
   const disabledMap = new Set(
-    configs.filter((c) => !c.enabled).map((c) => `${c.projectId}:${c.checkId}`)
+    configs.filter((c) => !c.enabled).map((c) => `${c.project_id}:${c.check_id}`)
   );
 
   const categories = [...new Set(ALL_CHECKS.map((c) => c.category))];
@@ -57,7 +59,7 @@ export default async function CheckConfigPage() {
   return (
     <div>
       <h1 className="text-2xl font-bold mb-6">Check Configuration</h1>
-      {!projects.length ? (
+      {!projects?.length ? (
         <p className="text-gray-500">Create a project first to configure checks.</p>
       ) : (
         <div className="space-y-6">

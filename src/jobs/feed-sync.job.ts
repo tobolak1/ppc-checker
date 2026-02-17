@@ -1,4 +1,5 @@
-import { prisma } from "@/db/prisma";
+import { db, T } from "@/db";
+import type { GeneratedCampaign, CampaignTemplate, Project, MerchantAccount } from "@/db/types";
 import { logger } from "@/lib/logger";
 import { syncFeedWithCampaigns } from "@/campaign-builder/sync/feed-sync";
 import { FeedProduct } from "@/campaign-builder/templates/types";
@@ -10,20 +11,12 @@ import { FeedProduct } from "@/campaign-builder/templates/types";
 export async function feedSyncJob(): Promise<void> {
   logger.info("Feed sync job started");
 
-  const activeCampaigns = await prisma.generatedCampaign.findMany({
-    where: { status: "active" },
-    include: {
-      template: {
-        include: {
-          project: {
-            include: { merchantAccounts: { where: { active: true } } },
-          },
-        },
-      },
-    },
-  });
+  const { data: activeCampaigns } = await db
+    .from(T.generatedCampaigns)
+    .select("*")
+    .eq("status", "active");
 
-  for (const campaign of activeCampaigns) {
+  for (const campaign of (activeCampaigns ?? []) as GeneratedCampaign[]) {
     try {
       // Fetch current products from Merchant Center
       // TODO: Use MerchantClient to fetch real products

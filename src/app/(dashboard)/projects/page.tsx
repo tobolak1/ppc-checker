@@ -1,21 +1,32 @@
-import { prisma } from "@/db/prisma";
+import { db, T } from "@/db";
+import type { Project, AdAccount, CheckRun } from "@/db/types";
 import Link from "next/link";
 import { CreateProjectForm } from "./create-form";
 
 export const dynamic = "force-dynamic";
 
 export default async function ProjectsPage() {
-  const projects = await prisma.project.findMany({
-    orderBy: { createdAt: "desc" },
-    include: {
-      _count: { select: { adAccounts: true } },
-      checkRuns: {
-        orderBy: { startedAt: "desc" },
-        take: 1,
-        select: { startedAt: true },
-      },
-    },
-  });
+  const { data: projects } = await db
+    .from(T.projects)
+    .select("*")
+    .order("created_at", { ascending: false });
+
+  const projectList = (projects ?? []) as Project[];
+
+  // Fetch counts and last check for each project
+  const enriched = await Promise.all(
+    projectList.map(async (p) => {
+      const [accountRes, checkRes] = await Promise.all([
+        db.from(T.adAccounts).select("id", { count: "exact", head: true }).eq("project_id", p.id),
+        db.from(T.checkRuns).select("started_at").eq("project_id", p.id).order("started_at", { ascending: false }).limit(1),
+      ]);
+      return {
+        ...p,
+        accountCount: accountRes.count ?? 0,
+        lastCheck: (checkRes.data?.[0] as CheckRun | undefined)?.started_at ?? null,
+      };
+    })
+  );
 
   return (
     <div>
@@ -24,10 +35,10 @@ export default async function ProjectsPage() {
       </div>
       <CreateProjectForm />
       <div className="grid gap-4 mt-6">
-        {!projects.length ? (
+        {!enriched.length ? (
           <p className="text-gray-500">No projects yet. Create your first project above.</p>
         ) : (
-          projects.map((p) => (
+          enriched.map((p) => (
             <Link key={p.id} href={`/projects/${p.id}`} className="bg-white rounded-lg shadow p-4 hover:shadow-md transition-shadow">
               <div className="flex justify-between items-start">
                 <div>
@@ -35,9 +46,9 @@ export default async function ProjectsPage() {
                   {p.description && <p className="text-sm text-gray-500 mt-1">{p.description}</p>}
                 </div>
                 <div className="text-right text-sm text-gray-400">
-                  <p>{p._count.adAccounts} account{p._count.adAccounts !== 1 ? "s" : ""}</p>
-                  {p.checkRuns[0] && (
-                    <p>Last check: {new Date(p.checkRuns[0].startedAt).toLocaleDateString()}</p>
+                  <p>{p.accountCount} account{p.accountCount !== 1 ? "s" : ""}</p>
+                  {p.lastCheck && (
+                    <p>Last check: {new Date(p.lastCheck).toLocaleDateString()}</p>
                   )}
                 </div>
               </div>

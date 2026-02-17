@@ -1,4 +1,5 @@
-import { prisma } from "@/db/prisma";
+import { db, T } from "@/db";
+import type { CheckRun, Finding } from "@/db/types";
 import { logger } from "@/lib/logger";
 
 /**
@@ -7,51 +8,50 @@ import { logger } from "@/lib/logger";
  */
 export async function resolveDisappearedFindings(projectId: string): Promise<number> {
   // Get the last two completed check runs for this project
-  const lastRuns = await prisma.checkRun.findMany({
-    where: { projectId, status: "completed" },
-    orderBy: { startedAt: "desc" },
-    take: 2,
-    select: { id: true },
-  });
+  const { data: lastRuns } = await db
+    .from(T.checkRuns)
+    .select("id")
+    .eq("project_id", projectId)
+    .eq("status", "completed")
+    .order("started_at", { ascending: false })
+    .limit(2);
 
-  if (lastRuns.length < 2) return 0;
+  if (!lastRuns || lastRuns.length < 2) return 0;
 
-  const [latestRun, previousRun] = lastRuns;
+  const [latestRun, previousRun] = lastRuns as Pick<CheckRun, "id">[];
 
   // Get check IDs from both runs
-  const [latestFindings, previousFindings] = await Promise.all([
-    prisma.finding.findMany({
-      where: { checkRunId: latestRun.id },
-      select: { checkId: true },
-    }),
-    prisma.finding.findMany({
-      where: { checkRunId: previousRun.id, resolvedAt: null },
-      select: { id: true, checkId: true },
-    }),
+  const [latestRes, previousRes] = await Promise.all([
+    db.from(T.findings).select("check_id").eq("check_run_id", latestRun.id),
+    db.from(T.findings).select("id, check_id").eq("check_run_id", previousRun.id).is("resolved_at", null),
   ]);
 
-  const latestCheckIds = new Set(latestFindings.map((f) => f.checkId));
+  const latestCheckIds = new Set(
+    ((latestRes.data ?? []) as Pick<Finding, "check_id">[]).map((f) => f.check_id)
+  );
 
   // Find findings from previous run that don't appear in latest
-  const resolved = previousFindings.filter((f) => !latestCheckIds.has(f.checkId));
+  const resolved = ((previousRes.data ?? []) as Pick<Finding, "id" | "check_id">[])
+    .filter((f) => !latestCheckIds.has(f.check_id));
 
   if (resolved.length === 0) return 0;
 
+  const resolvedIds = resolved.map((f) => f.id);
+  const now = new Date().toISOString();
+
   // Mark them as resolved
-  const result = await prisma.finding.updateMany({
-    where: { id: { in: resolved.map((f) => f.id) } },
-    data: { resolvedAt: new Date() },
-  });
+  await db
+    .from(T.findings)
+    .update({ resolved_at: now })
+    .in("id", resolvedIds);
 
   // Also resolve associated alerts
-  await prisma.alert.updateMany({
-    where: {
-      status: "ACTIVE",
-      findingId: { in: resolved.map((f) => f.id) },
-    },
-    data: { status: "RESOLVED", resolvedAt: new Date() },
-  });
+  await db
+    .from(T.alerts)
+    .update({ status: "RESOLVED", resolved_at: now })
+    .eq("status", "ACTIVE")
+    .in("finding_id", resolvedIds);
 
-  logger.info(`Auto-resolved ${result.count} findings for project ${projectId}`);
-  return result.count;
+  logger.info(`Auto-resolved ${resolved.length} findings for project ${projectId}`);
+  return resolved.length;
 }

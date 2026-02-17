@@ -1,5 +1,5 @@
-import { prisma } from "@/db/prisma";
-import { Prisma, SyncAction } from "@prisma/client";
+import { db, T } from "@/db";
+import type { SyncAction } from "@/db/types";
 import { logger } from "@/lib/logger";
 import { FeedProduct } from "../templates/types";
 
@@ -24,14 +24,14 @@ export async function syncFeedWithCampaigns(
   const currentMap = new Map(currentProducts.map((p) => [p.id, p]));
   const previousMap = new Map(previousProducts.map((p) => [p.id, p]));
 
-  const syncLogs: { action: SyncAction; changes: Prisma.InputJsonValue }[] = [];
+  const syncLogs: { action: SyncAction; changes: Record<string, unknown> }[] = [];
 
   // New products (in current, not in previous)
   for (const [id, product] of currentMap) {
     if (!previousMap.has(id)) {
       syncLogs.push({
         action: "CREATED",
-        changes: { productId: id, title: product.title, price: product.price } as Prisma.InputJsonValue,
+        changes: { productId: id, title: product.title, price: product.price },
       });
       result.created++;
     }
@@ -42,7 +42,7 @@ export async function syncFeedWithCampaigns(
     if (!currentMap.has(id)) {
       syncLogs.push({
         action: "PAUSED",
-        changes: { productId: id, title: product.title, reason: "removed_from_feed" } as Prisma.InputJsonValue,
+        changes: { productId: id, title: product.title, reason: "removed_from_feed" },
       });
       result.paused++;
     }
@@ -71,7 +71,7 @@ export async function syncFeedWithCampaigns(
       syncLogs.push({
         action: current.availability === "out_of_stock" ? "PAUSED" :
                previous.availability === "out_of_stock" ? "RESUMED" : "UPDATED",
-        changes: { productId: id, ...changes } as Prisma.InputJsonValue,
+        changes: { productId: id, ...changes },
       });
       result.updated++;
     }
@@ -79,18 +79,18 @@ export async function syncFeedWithCampaigns(
 
   // Persist sync logs
   if (syncLogs.length > 0) {
-    await prisma.syncLog.createMany({
-      data: syncLogs.map((log) => ({
-        generatedCampaignId,
+    await db.from(T.syncLogs).insert(
+      syncLogs.map((log) => ({
+        generated_campaign_id: generatedCampaignId,
         action: log.action,
         changes: log.changes,
-      })),
-    });
+      }))
+    );
 
-    await prisma.generatedCampaign.update({
-      where: { id: generatedCampaignId },
-      data: { syncedAt: new Date() },
-    });
+    await db
+      .from(T.generatedCampaigns)
+      .update({ synced_at: new Date().toISOString() })
+      .eq("id", generatedCampaignId);
   }
 
   logger.info("Feed sync completed", {

@@ -1,4 +1,4 @@
-import { Platform, Severity } from "@prisma/client";
+import type { Platform, Severity } from "@/db/types";
 
 export interface CheckFinding {
   checkId: string;

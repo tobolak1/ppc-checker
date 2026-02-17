@@ -1,6 +1,7 @@
 import { WebClient } from "@slack/web-api";
 import { CheckFinding } from "@/checks/types";
-import { prisma } from "@/db/prisma";
+import { db, T } from "@/db";
+import type { Finding } from "@/db/types";
 import { logger } from "@/lib/logger";
 
 const slack = process.env.SLACK_WEBHOOK_URL
@@ -105,18 +106,20 @@ export async function sendAlert(payload: AlertPayload): Promise<void> {
 
   // Persist alert in DB
   try {
-    // Find the most recent finding with this checkId
-    const dbFinding = await prisma.finding.findFirst({
-      where: { checkId: finding.checkId, resolvedAt: null },
-      orderBy: { createdAt: "desc" },
-    });
+    const { data: dbFinding } = await db
+      .from(T.findings)
+      .select("id")
+      .eq("check_id", finding.checkId)
+      .is("resolved_at", null)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .single<Pick<Finding, "id">>();
+
     if (dbFinding) {
-      await prisma.alert.create({
-        data: {
-          findingId: dbFinding.id,
-          channel,
-          status: "ACTIVE",
-        },
+      await db.from(T.alerts).insert({
+        finding_id: dbFinding.id,
+        channel,
+        status: "ACTIVE",
       });
     }
   } catch (err) {
@@ -141,24 +144,33 @@ async function sendWebhook(
 }
 
 export async function resolveAlerts(checkId: string): Promise<number> {
-  const result = await prisma.alert.updateMany({
-    where: {
-      status: "ACTIVE",
-      finding: { checkId, resolvedAt: { not: null } },
-    },
-    data: {
-      status: "RESOLVED",
-      resolvedAt: new Date(),
-    },
-  });
+  // Find active alerts for resolved findings with this checkId
+  const { data: resolvedFindings } = await db
+    .from(T.findings)
+    .select("id")
+    .eq("check_id", checkId)
+    .not("resolved_at", "is", null);
 
-  if (result.count > 0 && slack) {
+  if (!resolvedFindings?.length) return 0;
+
+  const findingIds = resolvedFindings.map((f) => f.id);
+  const now = new Date().toISOString();
+
+  const { count } = await db
+    .from(T.alerts)
+    .update({ status: "RESOLVED", resolved_at: now })
+    .eq("status", "ACTIVE")
+    .in("finding_id", findingIds);
+
+  const resolved = count ?? 0;
+
+  if (resolved > 0 && slack) {
     const channel = process.env.SLACK_CHANNEL_DEFAULT ?? "#ppc-alerts";
     await slack.chat.postMessage({
       channel,
-      text: `:white_check_mark: Resolved: *${checkId}* — ${result.count} alert(s) resolved.`,
+      text: `:white_check_mark: Resolved: *${checkId}* — ${resolved} alert(s) resolved.`,
     });
   }
 
-  return result.count;
+  return resolved;
 }

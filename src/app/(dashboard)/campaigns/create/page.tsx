@@ -1,13 +1,16 @@
-import { prisma } from "@/db/prisma";
+import { db, T } from "@/db";
+import type { Project } from "@/db/types";
 import { CampaignWizard } from "./wizard";
 
 export const dynamic = "force-dynamic";
 
 export default async function CreateCampaignPage() {
-  const projects = await prisma.project.findMany({
-    select: { id: true, name: true },
-    orderBy: { name: "asc" },
-  });
+  const { data } = await db
+    .from(T.projects)
+    .select("id, name")
+    .order("name", { ascending: true });
+
+  const projects = (data ?? []) as Pick<Project, "id" | "name">[];
 
   return (
     <div>

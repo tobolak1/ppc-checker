@@ -1,6 +1,6 @@
 "use server";
 
-import { prisma } from "@/db/prisma";
+import { db, T } from "@/db";
 import { revalidatePath } from "next/cache";
 
 export async function createProject(formData: FormData) {
@@ -8,13 +8,11 @@ export async function createProject(formData: FormData) {
   const description = formData.get("description") as string;
   if (!name) throw new Error("Name is required");
 
-  await prisma.project.create({
-    data: { name, description: description || null },
-  });
+  await db.from(T.projects).insert({ name, description: description || null });
   revalidatePath("/projects");
 }
 
 export async function deleteProject(id: string) {
-  await prisma.project.delete({ where: { id } });
+  await db.from(T.projects).delete().eq("id", id);
   revalidatePath("/projects");
 }

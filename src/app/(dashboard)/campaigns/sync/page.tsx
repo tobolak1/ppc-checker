@@ -1,15 +1,18 @@
-import { prisma } from "@/db/prisma";
+import { db, T } from "@/db";
+import type { SyncLog, GeneratedCampaign } from "@/db/types";
 
 export const dynamic = "force-dynamic";
 
+type SyncLogRow = SyncLog & { campaign: Pick<GeneratedCampaign, "name"> | null };
+
 export default async function SyncPage() {
-  const logs = await prisma.syncLog.findMany({
-    orderBy: { createdAt: "desc" },
-    take: 100,
-    include: {
-      generatedCampaign: { select: { name: true } },
-    },
-  });
+  const { data: logsRaw } = await db
+    .from(T.syncLogs)
+    .select("*, campaign:ppc_generated_campaigns(name)")
+    .order("created_at", { ascending: false })
+    .limit(100);
+
+  const logs = (logsRaw ?? []) as SyncLogRow[];
 
   const actionColors: Record<string, string> = {
     CREATED: "bg-green-100 text-green-800",
@@ -40,8 +43,8 @@ export default async function SyncPage() {
                   <td className="px-4 py-3">
                     <span className={`px-2 py-0.5 rounded text-xs font-medium ${actionColors[log.action]}`}>{log.action}</span>
                   </td>
-                  <td className="px-4 py-3">{log.generatedCampaign.name}</td>
-                  <td className="px-4 py-3 text-gray-500">{new Date(log.createdAt).toLocaleString()}</td>
+                  <td className="px-4 py-3">{log.campaign?.name ?? "—"}</td>
+                  <td className="px-4 py-3 text-gray-500">{new Date(log.created_at).toLocaleString()}</td>
                 </tr>
               ))}
             </tbody>

@@ -1,6 +1,6 @@
 import { runChecksForAllProjects } from "@/checks/runner";
 import { resolveDisappearedFindings } from "@/notifications/resolver";
-import { prisma } from "@/db/prisma";
+import { db, T } from "@/db";
 import { logger } from "@/lib/logger";
 
 /**
@@ -16,9 +16,9 @@ export async function checkRunnerJob(): Promise<void> {
     const result = await runChecksForAllProjects();
 
     // Auto-resolve findings that disappeared
-    const projects = await prisma.project.findMany({ select: { id: true } });
+    const { data: projects } = await db.from(T.projects).select("id");
     let totalResolved = 0;
-    for (const project of projects) {
+    for (const project of projects ?? []) {
       totalResolved += await resolveDisappearedFindings(project.id);
     }
 

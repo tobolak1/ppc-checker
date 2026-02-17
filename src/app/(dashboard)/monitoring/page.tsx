@@ -1,13 +1,12 @@
-import { prisma } from "@/db/prisma";
+import { db, T } from "@/db";
+import type { Finding } from "@/db/types";
 import { RunChecksButton } from "./run-checks-button";
 
 export const dynamic = "force-dynamic";
 
 export default async function MonitoringPage() {
-  const findings = await prisma.finding.findMany({
-    orderBy: { createdAt: "desc" },
-    take: 50,
-  });
+  const { data } = await db.from(T.findings).select("*").order("created_at", { ascending: false }).limit(50);
+  const findings = (data ?? []) as Finding[];
 
   const severityColors: Record<string, string> = {
     CRITICAL: "bg-red-100 text-red-800",
@@ -42,9 +41,9 @@ export default async function MonitoringPage() {
                   <td className="px-4 py-3">
                     <span className={`px-2 py-0.5 rounded text-xs font-medium ${severityColors[f.severity]}`}>{f.severity}</span>
                   </td>
-                  <td className="px-4 py-3 font-mono text-gray-600">{f.checkId}</td>
+                  <td className="px-4 py-3 font-mono text-gray-600">{f.check_id}</td>
                   <td className="px-4 py-3">{f.title}</td>
-                  <td className="px-4 py-3">{f.resolvedAt ? "Resolved" : "Active"}</td>
+                  <td className="px-4 py-3">{f.resolved_at ? "Resolved" : "Active"}</td>
                 </tr>
               ))}
             </tbody>

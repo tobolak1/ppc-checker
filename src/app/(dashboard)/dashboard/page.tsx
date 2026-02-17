@@ -1,18 +1,19 @@
-import { prisma } from "@/db/prisma";
+import { db, T } from "@/db";
+import type { Finding } from "@/db/types";
 import Link from "next/link";
 
 export const dynamic = "force-dynamic";
 
 export default async function DashboardPage() {
-  const [accountCount, findings, campaignCount] = await Promise.all([
-    prisma.adAccount.count(),
-    prisma.finding.findMany({
-      where: { resolvedAt: null },
-      orderBy: { createdAt: "desc" },
-      take: 10,
-    }),
-    prisma.generatedCampaign.count(),
+  const [accountRes, findingsRes, campaignRes] = await Promise.all([
+    db.from(T.adAccounts).select("id", { count: "exact", head: true }),
+    db.from(T.findings).select("*").is("resolved_at", null).order("created_at", { ascending: false }).limit(10),
+    db.from(T.generatedCampaigns).select("id", { count: "exact", head: true }),
   ]);
+
+  const accountCount = accountRes.count ?? 0;
+  const findings = (findingsRes.data ?? []) as Finding[];
+  const campaignCount = campaignRes.count ?? 0;
 
   const severityColors: Record<string, string> = {
     CRITICAL: "bg-red-100 text-red-800",
@@ -56,7 +57,7 @@ export default async function DashboardPage() {
             {findings.map((f) => (
               <li key={f.id} className="p-4 flex items-center gap-3">
                 <span className={`px-2 py-0.5 rounded text-xs font-medium ${severityColors[f.severity]}`}>{f.severity}</span>
-                <span className="text-sm font-mono text-gray-600">{f.checkId}</span>
+                <span className="text-sm font-mono text-gray-600">{f.check_id}</span>
                 <span className="text-sm flex-1">{f.title}</span>
               </li>
             ))}

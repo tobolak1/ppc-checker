@@ -1,16 +1,29 @@
-import { prisma } from "@/db/prisma";
+import { db, T } from "@/db";
+import type { CampaignTemplate, Project } from "@/db/types";
 import Link from "next/link";
 
 export const dynamic = "force-dynamic";
 
+type TemplateRow = CampaignTemplate & { project: Pick<Project, "name"> | null };
+
 export default async function CampaignsPage() {
-  const templates = await prisma.campaignTemplate.findMany({
-    orderBy: { createdAt: "desc" },
-    include: {
-      project: { select: { name: true } },
-      _count: { select: { generatedCampaigns: true } },
-    },
-  });
+  const { data: templatesRaw } = await db
+    .from(T.campaignTemplates)
+    .select("*, project:ppc_projects(name)")
+    .order("created_at", { ascending: false });
+
+  const templates = (templatesRaw ?? []) as TemplateRow[];
+
+  // Get generated campaign counts per template
+  const counts = await Promise.all(
+    templates.map(async (t) => {
+      const { count } = await db
+        .from(T.generatedCampaigns)
+        .select("id", { count: "exact", head: true })
+        .eq("template_id", t.id);
+      return count ?? 0;
+    })
+  );
 
   return (
     <div>
@@ -36,15 +49,15 @@ export default async function CampaignsPage() {
               </tr>
             </thead>
             <tbody className="divide-y">
-              {templates.map((t) => (
+              {templates.map((t, i) => (
                 <tr key={t.id} className="hover:bg-gray-50">
                   <td className="px-4 py-3">
                     <Link href={`/campaigns/${t.id}`} className="font-medium text-blue-600 hover:underline">{t.name}</Link>
                   </td>
-                  <td className="px-4 py-3 text-gray-500">{t.project.name}</td>
-                  <td className="px-4 py-3">{t.campaignType}</td>
+                  <td className="px-4 py-3 text-gray-500">{t.project?.name ?? "—"}</td>
+                  <td className="px-4 py-3">{t.campaign_type}</td>
                   <td className="px-4 py-3">{t.platform}</td>
-                  <td className="px-4 py-3">{t._count.generatedCampaigns}</td>
+                  <td className="px-4 py-3">{counts[i]}</td>
                   <td className="px-4 py-3">{t.active ? "Active" : "Inactive"}</td>
                 </tr>
               ))}

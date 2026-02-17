@@ -1,5 +1,5 @@
-import { prisma } from "@/db/prisma";
-import { Prisma, Severity } from "@prisma/client";
+import { db, T } from "@/db";
+import type { Severity, AdAccount, MerchantAccount, CheckConfig } from "@/db/types";
 import { checkAds } from "./ads";
 import { checkProducts } from "./products";
 import { checkKeywords } from "./keywords";
@@ -10,26 +10,24 @@ import { AdAccountContext, CheckFinding, MerchantAccountContext } from "./types"
 import { sendAlert } from "@/notifications/slack";
 
 export async function runAllChecks(projectId: string): Promise<CheckFinding[]> {
-  const [adAccounts, merchantAccounts, checkConfigs] = await Promise.all([
-    prisma.adAccount.findMany({
-      where: { projectId, active: true },
-    }),
-    prisma.merchantAccount.findMany({
-      where: { projectId, active: true },
-    }),
-    prisma.checkConfig.findMany({
-      where: { projectId },
-    }),
+  const [adRes, merchantRes, configRes] = await Promise.all([
+    db.from(T.adAccounts).select("*").eq("project_id", projectId).eq("active", true),
+    db.from(T.merchantAccounts).select("*").eq("project_id", projectId).eq("active", true),
+    db.from(T.checkConfigs).select("*").eq("project_id", projectId),
   ]);
 
+  const adAccounts = (adRes.data ?? []) as AdAccount[];
+  const merchantAccounts = (merchantRes.data ?? []) as MerchantAccount[];
+  const checkConfigs = (configRes.data ?? []) as CheckConfig[];
+
   const disabledChecks = new Set(
-    checkConfigs.filter((c) => !c.enabled).map((c) => c.checkId)
+    checkConfigs.filter((c) => !c.enabled).map((c) => c.check_id)
   );
 
   const thresholdMap = new Map(
     checkConfigs
       .filter((c) => c.threshold)
-      .map((c) => [c.checkId, c.threshold as Record<string, unknown>])
+      .map((c) => [c.check_id, c.threshold as Record<string, unknown>])
   );
 
   const allFindings: CheckFinding[] = [];
@@ -37,11 +35,11 @@ export async function runAllChecks(projectId: string): Promise<CheckFinding[]> {
   for (const account of adAccounts) {
     const ctx: AdAccountContext = {
       id: account.id,
-      projectId: account.projectId,
+      projectId: account.project_id,
       platform: account.platform,
-      externalId: account.externalId,
+      externalId: account.external_id,
       name: account.name,
-      credentials: account.credentials as Record<string, unknown> | null,
+      credentials: account.credentials,
     };
 
     const checkGroups = [
@@ -64,10 +62,10 @@ export async function runAllChecks(projectId: string): Promise<CheckFinding[]> {
     if (!disabledChecks.has("products")) {
       const ctx: MerchantAccountContext = {
         id: merchant.id,
-        projectId: merchant.projectId,
-        externalId: merchant.externalId,
+        projectId: merchant.project_id,
+        externalId: merchant.external_id,
         name: merchant.name,
-        feedUrl: merchant.feedUrl,
+        feedUrl: merchant.feed_url,
       };
       allFindings.push(...(await checkProducts(ctx, thresholdMap.get("products"))));
     }
@@ -80,31 +78,34 @@ export async function runChecksForAllProjects(): Promise<{
   projectsChecked: number;
   totalFindings: number;
 }> {
-  const projects = await prisma.project.findMany({ select: { id: true, name: true } });
+  const { data: projects } = await db.from(T.projects).select("id, name");
   let totalFindings = 0;
 
-  for (const project of projects) {
-    const checkRun = await prisma.checkRun.create({
-      data: { projectId: project.id },
-    });
+  for (const project of projects ?? []) {
+    const { data: checkRun } = await db
+      .from(T.checkRuns)
+      .insert({ project_id: project.id })
+      .select("id")
+      .single();
+
+    if (!checkRun) continue;
 
     try {
       const findings = await runAllChecks(project.id);
       totalFindings += findings.length;
 
       if (findings.length > 0) {
-        await prisma.finding.createMany({
-          data: findings.map((f) => ({
-            checkRunId: checkRun.id,
-            checkId: f.checkId,
+        await db.from(T.findings).insert(
+          findings.map((f) => ({
+            check_run_id: checkRun.id,
+            check_id: f.checkId,
             severity: f.severity as Severity,
             title: f.title,
             message: f.message,
-            data: f.data ? (f.data as Prisma.InputJsonValue) : Prisma.JsonNull,
-          })),
-        });
+            data: f.data ?? null,
+          }))
+        );
 
-        // Send alerts for critical/high findings
         for (const finding of findings) {
           if (finding.severity === "CRITICAL" || finding.severity === "HIGH") {
             await sendAlert({
@@ -117,18 +118,18 @@ export async function runChecksForAllProjects(): Promise<{
         }
       }
 
-      await prisma.checkRun.update({
-        where: { id: checkRun.id },
-        data: { status: "completed", endedAt: new Date() },
-      });
+      await db
+        .from(T.checkRuns)
+        .update({ status: "completed", ended_at: new Date().toISOString() })
+        .eq("id", checkRun.id);
     } catch (error) {
-      await prisma.checkRun.update({
-        where: { id: checkRun.id },
-        data: { status: "failed", endedAt: new Date() },
-      });
+      await db
+        .from(T.checkRuns)
+        .update({ status: "failed", ended_at: new Date().toISOString() })
+        .eq("id", checkRun.id);
       throw error;
     }
   }
 
-  return { projectsChecked: projects.length, totalFindings };
+  return { projectsChecked: projects?.length ?? 0, totalFindings };
 }

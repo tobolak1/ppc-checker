@@ -1,4 +1,4 @@
-import { CampaignType, Platform } from "@prisma/client";
+import type { CampaignType, Platform } from "@/db/types";
 
 export interface SegmentationRule {
   type: "category" | "brand" | "priceRange" | "customLabel" | "margin";

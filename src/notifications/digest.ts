@@ -1,6 +1,6 @@
-import { prisma } from "@/db/prisma";
+import { db, T } from "@/db";
+import type { Severity, Finding } from "@/db/types";
 import { logger } from "@/lib/logger";
-import { Severity } from "@prisma/client";
 
 interface DigestEntry {
   severity: Severity;
@@ -15,26 +15,24 @@ export async function buildDailyDigest(): Promise<{
   entries: DigestEntry[];
   resolvedLast24h: number;
 }> {
-  const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000);
+  const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
 
-  const [activeFindings, resolvedCount] = await Promise.all([
-    prisma.finding.findMany({
-      where: { resolvedAt: null },
-      select: { checkId: true, severity: true, title: true },
-    }),
-    prisma.finding.count({
-      where: { resolvedAt: { gte: yesterday } },
-    }),
+  const [activeRes, resolvedRes] = await Promise.all([
+    db.from(T.findings).select("check_id, severity, title").is("resolved_at", null),
+    db.from(T.findings).select("id", { count: "exact", head: true }).gte("resolved_at", yesterday),
   ]);
 
-  // Group by checkId
+  const activeFindings = (activeRes.data ?? []) as Pick<Finding, "check_id" | "severity" | "title">[];
+  const resolvedCount = resolvedRes.count ?? 0;
+
+  // Group by check_id
   const grouped = new Map<string, { severity: Severity; title: string; count: number }>();
   for (const f of activeFindings) {
-    const existing = grouped.get(f.checkId);
+    const existing = grouped.get(f.check_id);
     if (existing) {
       existing.count++;
     } else {
-      grouped.set(f.checkId, { severity: f.severity, title: f.title, count: 1 });
+      grouped.set(f.check_id, { severity: f.severity, title: f.title, count: 1 });
     }
   }
 
